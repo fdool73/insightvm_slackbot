@@ -1,0 +1,14 @@
+[Unit]
+Description=InsightVM Slackbot Service
+
+[Service]
+WorkingDirectory=/home/slackbot/insightvm_bot/
+ExecStart=/home/slackbot/insightvm_bot/.venv/bin/python insightvm_bot.py
+Restart=always
+Type=simple
+StandardOutput=null
+User=slackbot
+Group=slackbot
+
+[Install]
+WantedBy=multi-user.target

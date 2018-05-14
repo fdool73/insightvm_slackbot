@@ -62,7 +62,7 @@ def worker():
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
-        # Counting Nexpose to handle different site errors.
+        # Counting insightvm to handle different site errors.
         if len(scan_sites) > 1 and 'site id' in item['command'].lower():
             try:
                 scan_id = helpers.adhoc_site_scan(item['ip_list'], int(command.split(':'[1])))
@@ -73,11 +73,11 @@ def worker():
         elif len(scan_sites) > 1:
             message = '<@{}> Assets exist in multiple sites ({}). '
             message += 'Please re-run command with '
-            message += '`@nexpose_bot scan <IPs> site id:<ID>``'
+            message += '`@insightvm_bot scan <IPs> site id:<ID>``'
             message = message.format(item['user'], scan_sites)
         elif len(scan_sites) == 0:
             message = '<@{}> scan for {} *failed*.'
-            message += '  Device(s) do not exist in Nexpose :confounded:'
+            message += '  Device(s) do not exist in insightvm :confounded:'
             message += ' Device must have been scanned previously through a normal scan.'
             message = message.format(item['user'], item['ip_list'])
         else:
@@ -110,7 +110,7 @@ def worker():
         if scan['status'] == 'finished':
             message = "<@{}> Scan ID: {} finished for {} at {}\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
-            message += "Report is being generated at https://nexpose.secops.rackspace.com/report/reports.jsp"
+            message += "Report is being generated at https://insightvm.secops.rackspace.com/report/reports.jsp"
             message = message.format(item['user'], scan_id, item['ip_list'],
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
@@ -151,8 +151,8 @@ if __name__ == "__main__":
     # Get additoinal SECRETS parameters
     try:
         slack_token = SECRETS['slack']['token']
-        nexpose_user = SECRETS['insightvm']['username']
-        nexpose_pass = SECRETS['insightvm']['password']
+        insightvm_user = SECRETS['insightvm']['username']
+        insightvm_pass = SECRETS['insightvm']['password']
     except KeyError:
         log.critical('Secrets file missing required parameters')
         sys.exit()
@@ -161,8 +161,8 @@ if __name__ == "__main__":
     slack_client = SlackClient(slack_token)
     log.info('Connecting to Slack.')
 
-    # nexpose_bot's user ID in Slack: value is assigned after the bot starts up
-    nexpose_bot_id = None
+    # insightvm_bot's user ID in Slack: value is assigned after the bot starts up
+    insightvm_bot_id = None
 
     # Initialize queue -- global
     scan_tasker_queue = queue.Queue()
@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
     # Connect to Slack
     if slack_client.rtm_connect(with_team_state=False):
-        log.info("Nexpose Bot connected and running!")
+        log.info("insightvm Bot connected and running!")
 
         # Start workers
         threads = []
@@ -184,16 +184,16 @@ if __name__ == "__main__":
             threads.append(t)
 
         # Read bot's user ID by calling Web API method `auth.test`
-        nexpose_bot_id = slack_client.api_call("auth.test")["user_id"]
-        if not nexpose_bot_id:
+        insightvm_bot_id = slack_client.api_call("auth.test")["user_id"]
+        if not insightvm_bot_id:
             log.error('Failed Slack auth test -- exiting')
             sys.exit()
 
         log.debug('Passed Slack auth test')
         # Listen to Slack, receive and parse messages
-        while True and nexpose_bot_id:
+        while True and insightvm_bot_id:
             try:
-                command, channel, user = helpers.parse_bot_commands(slack_client.rtm_read(), nexpose_bot_id)
+                command, channel, user = helpers.parse_bot_commands(slack_client.rtm_read(), insightvm_bot_id)
                 if command:
                     log.debug("Got message from Slack: {}")
                     log.debug('{} {} {}'.format(command, channel, user))

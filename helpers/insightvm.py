@@ -767,7 +767,7 @@ def find_insightvm_report_full_file_path_on_console(report_id):
     json_response = json.loads(response.text)
 
     if json_response['uri']:
-        htroot = '/opt/rapid7/nexpose/nsc/htroot'
+        htroot = '/opt/rapid7/insightvm/nsc/htroot'
         uri = '{0}{1}'.format('/reports/', json_response['uri'].split('/reports/')[1])
         full_file_path = "{0}{1}.gz".format(htroot, uri)
         report_name = retrieve_report_name_from_id(report_id)
