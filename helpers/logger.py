@@ -18,12 +18,7 @@ class Logger():
             print("Directory did not exist; Creating: {}".format(self.log_file_base_dir))
             os.makedirs(self.log_file_base_dir)
 
-        # Provide default log name if one isn't provided.
-        if log_file_name is None:
-            # Ex:  /var/log/rackspace/myscript.py__2018-04-25T19-34-36.482277+00-00.log
-            self.log_file_name = "{}__{}.log".format(os.path.basename(__file__), datetime.datetime.now(datetime.timezone.utc).isoformat().replace(':', '-'))
-        else:
-            self.log_file_name = log_file_name
+        self.log_file_name = 'slackbot.log'
 
         # Construct full log path.
         self.full_log_file_name = os.path.join(self.log_file_base_dir, self.log_file_name)
