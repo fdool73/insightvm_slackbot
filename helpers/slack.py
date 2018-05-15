@@ -8,12 +8,26 @@ MENTION_REGEX = "^<@(|[WU].+?)>(.*)"
 
 def extract_ips(input_string):
     """
-    Regex function to parse text and return a list of IPs int the text.
+    Regex function to parse text and return a list of IPs in the text.
     """
     # Regex to parse IP addresses
+    ip_matches = []
     ip_regex = "(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[?0-5]|2[0-4][0-9]|[01?]?[0-9][0-9]?)"
     ip_matches = re.findall(ip_regex, input_string)
-    return ip_matches if ip_matches else None
+    return ip_matches
+
+
+def extract_hostnames(input_string):
+    """
+    Regex function to parse text and return a list of hostnames in the text.
+    """
+    # Regex to parse hostnames
+    hostname_matches = []
+    hostname_regex = '(?:[a-zA-Z0-9\-]*\.)+(?:[a-zA-Z])+'
+    hostname_matches = re.findall(hostname_regex, input_string)
+    dedup = set(hostname_matches)
+    hostname_matches = list(dedup)
+    return hostname_matches
 
 
 def get_gif():
@@ -68,24 +82,26 @@ def handle_command(command, channel, user, queue):
     """
 
     # Default response is help text for the user
-    response = "<@{}> Not sure what you mean. Try *{}*.".format(user, EXAMPLE_COMMAND)
+    response = "<@{}> Not sure what you mean. Try *@nexpose_bot {}*.".format(user, EXAMPLE_COMMAND)
 
     # Test to see if IPs are in the command
     ip_list = extract_ips(command)
+    hostname_list = extract_hostnames(command)
+    target_list = ip_list + hostname_list
 
     # Finds and executes the given command, filling in response
     # Check if the IP list exists and is not longer than 5 IPs
-    if (command.startswith(EXAMPLE_COMMAND) and ip_list and len(ip_list) > 5):
+    if (command.startswith(EXAMPLE_COMMAND) and target_list and len(target_list) > 5):
         response = 'Please limit your ad hoc scan to 5 or less IPs.'
 
     # Check if list has proper list of IPs and schedule scan
-    elif ip_list and command.startswith(EXAMPLE_COMMAND):
-        response = "<@{}> Scheduling scan for: {}.".format(user, ','.join(ip_list))
+    elif target_list and command.startswith(EXAMPLE_COMMAND):
+        response = "<@{}> Scheduling scan for: {}.".format(user, ','.join(target_list))
         response += '  :partyparrot:'
 
         # Write data to queue
         queue.put({'command': command,
-                   'ip_list': ip_list,
+                   'target_list': target_list,
                    'channel': channel,
                    'user': user})
 

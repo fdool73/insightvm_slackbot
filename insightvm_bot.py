@@ -37,56 +37,73 @@ def worker():
         # Get item off the queue, exit if nothing queued.
         item = scan_tasker_queue.get()
         log.debug('Worker started and got item from queue.')
-        log.debug("Got {} IPs from command.".format(len(item['ip_list'])))
+        log.debug("Got {} targets from command.".format(len(item['target_list'])))
         if item is None:
             break
 
         # Determine site for IDs.
         # List placeholder, parrallel function returns a list of outputs
-        scan_sites_list = []
+        site_asset_set = []
         log.info("Getting list of all sites.")
         sites = helpers.retrieve_all_site_ids()
         log.info('Retrieving target lists, this may take a while...')
 
         # Run site_membership in parrallel, this is the biggest bottleneck
-        scan_sites_list = Parallel(n_jobs=10, backend="threading")(
-            delayed(helpers.site_membership)(site, item['ip_list'])
+        site_asset_list = Parallel(n_jobs=10, backend="threading")(
+            delayed(helpers.site_membership)(site, item['target_list'])
             for site in sites.keys())
 
-        log.debug('List returned from parrallel processing: {}'.format(scan_sites_list))
+        # Dedup
+        site_asset_set = set(site_asset_list)
+        site_asset_set.remove(None)
 
-        # Dedup sites (if multiple assets) and remove None
-        scan_sites = set(scan_sites_list)
-        scan_sites.remove(None)
-        log.info('Site set: {}'.format(scan_sites))
+        log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
+
+        # Parse site and address to determine any assets that do not live
+        # in InsightVM.
+        target_set = set()
+        site_set = set()
+        no_scan_set = set()
+        # Get actual targets and site
+        for site_asset_pair in site_asset_set:
+            if site_asset_pair[0] == 0:
+                no_scan_set.add(site_asset_pair[1])
+            target_set.add(site_asset_pair[1])
+            site_set.add(site_asset_pair[0])
+
+        log.info('Site set: {}'.format(site_set))
+        log.info('Target set: {}'.format(target_set))
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
         # Counting insightvm to handle different site errors.
-        if len(scan_sites) > 1 and 'site id' in item['command'].lower():
+        if len(site_set) > 1 and 'site id' in item['command'].lower():
             try:
-                scan_id = helpers.adhoc_site_scan(item['ip_list'], int(command.split(':'[1])))
+                scan_id = helpers.adhoc_site_scan(target_set, int(command.split(':'[1])))
                 message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
             except SystemError as e:
                 message = "<@{}> Scan ID: {} produced an error".format(item['user'])
                 message += e
-        elif len(scan_sites) > 1:
+        elif len(site_set) > 1:
             message = '<@{}> Assets exist in multiple sites ({}). '
             message += 'Please re-run command with '
             message += '`@insightvm_bot scan <IPs> site id:<ID>``'
-            message = message.format(item['user'], scan_sites)
-        elif len(scan_sites) == 0:
+            message = message.format(item['user'], site_set)
+        elif len(site_set) == 0:
             message = '<@{}> scan for {} *failed*.'
             message += '  Device(s) do not exist in insightvm :confounded:'
             message += ' Device must have been scanned previously through a normal scan.'
-            message = message.format(item['user'], item['ip_list'])
+            message = message.format(item['user'], item['target_list'])
         else:
             try:
-                scan_id = helpers.adhoc_site_scan(item['ip_list'], scan_sites.pop())
+                scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
                 message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
             except SystemError as e:
-                message = "<@{}> Scan ID: {} produced an error".format(item['user'], scan_id)
+                message = "<@{}> Scan produced an error".format(item['user'])
                 message += e
+
+        if no_scan_set:
+            message += 'These hosts do not exist in InsightVM, unable to scan: {}'.format(no_scan_set)
 
         # Respond to Slack with result
         log.info(message)
@@ -111,7 +128,7 @@ def worker():
             message = "<@{}> Scan ID: {} finished for {} at {}\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
             message += "Report is being generated at https://insightvm.secops.rackspace.com/report/reports.jsp"
-            message = message.format(item['user'], scan_id, item['ip_list'],
+            message = message.format(item['user'], scan_id, item['target_list'],
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
                                      scan['vulnerabilities'])
@@ -121,7 +138,7 @@ def worker():
             message = "<@{}> Scan ID: {} *failed* for"
             message += " {} at {} :sob:"
             message += "Please contact the TVA team."
-            message = message.format(item['user'], scan_id, item['ip_list'], time.asctime())
+            message = message.format(item['user'], scan_id, item['target_list'], time.asctime())
 
         # Respond in Slack with scan finished message.
         log.info(message)

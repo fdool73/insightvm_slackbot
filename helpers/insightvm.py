@@ -4,6 +4,7 @@ import csv
 import datetime
 import json
 import os
+import socket
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -152,6 +153,10 @@ def retrieve_included_targets_in_site(site_id, verbose=True):
                 to_ip = target.split(' - ')[1]
                 expanded_ips = utility.expand_range_of_ips(from_ip, to_ip, False)
                 included_targets += expanded_ips
+            else:
+                # For hostnames
+                included_targets.append(target)
+
     if verbose:
         print("[*] Found {0} included targets for site: {1}".format(len(included_targets), site_id))
 
@@ -250,6 +255,7 @@ def retrieve_targets_in_asset_group(asset_group_id, verbose=True):
 
         for address in json_response['addresses']:
             targets.append(address['ip'])
+        targets.append(json_response['hostName'])
 
     if verbose:
         print("[*] Retrieved {0} targets in asset group ID: {1}".format(len(targets), asset_group_id))
@@ -884,17 +890,27 @@ def retrieve_scan_status(scan_id):
     return json_response
 
 
-def site_membership(site, ip_list):
-    '''Determines if the provided IP(s) are part of a given site. This function
+def site_membership(site, target_list):
+    '''Determines if the provided IP(s)/hostnames are part of a given site. This function
     should be used to loop through a collection (all) sites.
     '''
     targs = retrieve_included_targets_in_site(site, False)
     targs += retrieve_sites_all_included_asset_group_targets(site)
-    for address in ip_list:
+    for address in target_list:
+        # IP to IP matching
         if address in targs:
-            return site
+            return site, address
+        # IP to Hostname Matching
+        elif utility.is_ip_address(address) and socket.gethostbyaddr(address)[0] in targs:
+            return site, socket.gethostbyaddr(address)[0]
+        # Hostname to Hostname matching
         else:
-            return None
+            try:
+                hostname = socket.gethostbyname(address)
+                if hostname in targs:
+                    return site, hostname
+            except socket.gaierror:
+                return 0, address
 
 
 def generate_headers():
