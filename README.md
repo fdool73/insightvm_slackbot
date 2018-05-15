@@ -46,7 +46,7 @@ All values are required.
 ```bash
 # Create a symlink
 cd /lib/systemd/system/
-ln -s /path/to/insightvm_bot/insightvm-bot.service scanmon.service
+ln -s /path/to/insightvm_bot/insightvm-bot.service insightvm-bot.service
 cd -
 chown root:root /lib/systemd/system/insightvm-bot.service
 systemctl daemon-reload

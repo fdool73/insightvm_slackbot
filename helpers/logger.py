@@ -10,7 +10,7 @@ class Logger():
     def __init__(self, log_level, log_file_name=None):
 
         # Set root directory for logs.
-        self.log_file_base_dir = '/'
+        self.log_file_base_dir = log_file_name
         self.master_log = "{}/master.log".format(self.log_file_base_dir)
 
         # Creates base directory if it does not exist.
