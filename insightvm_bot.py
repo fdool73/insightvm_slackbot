@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     # Set up logger
     log_level = SECRETS['options']['log_level']
-    log_location = SECRETS['options']['log_location'] + '/slackbot.log'
+    log_location = SECRETS['options']['log_location']
     # Use as global var
     log = helpers.Logger(log_level, log_location).root_logger
     log.info('InsightVM Slack bot started.')
