@@ -901,14 +901,20 @@ def site_membership(site, target_list):
         if address in targs:
             return site, address
         # IP to Hostname Matching
-        elif utility.is_ip_address(address) and socket.gethostbyaddr(address)[0] in targs:
-            return site, socket.gethostbyaddr(address)[0]
+        elif utility.is_ip_address(address):
+            try:
+                if socket.gethostbyaddr(address)[0] in targs:
+                    return site, socket.gethostbyaddr(address)[0]
+            # Handle unknown host error
+            except socket.herror:
+                return 0, address
         # Hostname to Hostname matching
         else:
             try:
                 hostname = socket.gethostbyname(address)
                 if hostname in targs:
                     return site, hostname
+            # Handle unknown host error
             except socket.gaierror:
                 return 0, address
 
