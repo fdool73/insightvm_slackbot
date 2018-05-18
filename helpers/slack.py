@@ -1,5 +1,9 @@
+from joblib import Parallel, delayed
 import re
 from random import choice
+import time
+
+import helpers
 
 
 EXAMPLE_COMMAND = "scan"
@@ -12,7 +16,7 @@ def extract_ips(input_string):
     """
     # Regex to parse IP addresses
     ip_matches = []
-    ip_regex = "(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[?0-5]|2[0-4][0-9]|[01?]?[0-9][0-9]?)"
+    ip_regex = '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[?0-5]|2[0-4][0-9]|[01?]?[0-9][0-9]?(?!\w))'
     ip_matches = re.findall(ip_regex, input_string)
     return ip_matches
 
@@ -23,7 +27,7 @@ def extract_hostnames(input_string):
     """
     # Regex to parse hostnames
     hostname_matches = []
-    hostname_regex = '(?:[a-zA-Z0-9\-]*\.)+(?:[a-zA-Z])+'
+    hostname_regex = '(?:^|(?<=\s))(?:[a-zA-Z0-9\-]+\.)+(?:[a-zA-Z])+(?:(?=\s|(?=[,])|(?=$)))'
     hostname_matches = re.findall(hostname_regex, input_string)
     dedup = set(hostname_matches)
     hostname_matches = list(dedup)
@@ -54,6 +58,7 @@ def parse_bot_commands(slack_events, bot_id):
         If a bot command is found, this function returns a tuple of command and channel.
         If its not found, then this function returns None, None.
     """
+
     for event in slack_events:
         if event["type"] == "message" and "subtype" not in event:
             user_id, message = parse_direct_mention(event["text"])
@@ -111,3 +116,128 @@ def handle_command(command, channel, user, queue):
         response += 'Use `scan <IP Address>`'
 
     return response
+
+
+def worker(scan_tasker_queue, slack_client, log):
+    """
+    Worker function to take items off the queue and process them. This worker
+    gets scan tasks, starts the scan, monitors scan progress, and returns scan
+    results.
+    """
+    while True:
+        # Get item off the queue, exit if nothing queued.
+        item = scan_tasker_queue.get()
+        log.debug('Worker started and got item from queue.')
+        log.debug("Got {} targets from command.".format(len(item['target_list'])))
+        if item is None:
+            break
+
+        # Determine site for IDs.
+        # List placeholder, parrallel function returns a list of outputs
+        site_asset_set = []
+        log.info("Getting list of all sites.")
+        sites = helpers.retrieve_all_site_ids()
+        log.info('Retrieving target lists, this may take a while...')
+
+        # Run site_membership in parrallel, this is the biggest bottleneck
+        site_asset_list = Parallel(n_jobs=10, backend="threading")(
+            delayed(helpers.site_membership)(site, item['target_list'])
+            for site in sites.keys())
+
+        # Dedup
+        site_asset_set = set(site_asset_list)
+        site_asset_set.remove(None)
+
+        log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
+
+        # Parse site and address to determine any assets that do not live
+        # in InsightVM.
+        target_set = set()
+        site_set = set()
+        no_scan_set = set()
+        # Get actual targets and site
+        for site_asset_pair in site_asset_set:
+            if site_asset_pair[0] == 0:
+                no_scan_set.add(site_asset_pair[1])
+            target_set.add(site_asset_pair[1])
+            site_set.add(site_asset_pair[0])
+
+        log.info('Site set: {}'.format(site_set))
+        log.info('Target set: {}'.format(target_set))
+
+        # Check if assets reside in more than one site, prompt for additional
+        # info if needed.  All assets should/must reside in one common site.
+        # Counting insightvm to handle different site errors.
+        if len(site_set) > 1 and 'site id:' in item['command'].lower():
+            try:
+                scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':'[1])))
+                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
+            except SystemError as e:
+                message = "<@{}> Scan ID: {} produced an error".format(item['user'])
+                message += e
+        elif len(site_set) > 1:
+            message = '<@{}> Assets exist in multiple sites ({}). '
+            message += 'Please re-run command with '
+            message += '`@insightvm_bot scan <IPs> site id:<ID>``'
+            message = message.format(item['user'], site_set)
+        elif len(site_set) == 0:
+            message = '<@{}> scan for {} *failed*.'
+            message += '  Device(s) do not exist in insightvm :confounded:'
+            message += ' Device must have been scanned previously through a normal scan.'
+            message = message.format(item['user'], item['target_list'])
+        else:
+            try:
+                scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
+                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
+            except SystemError as e:
+                message = "<@{}> Scan produced an error".format(item['user'])
+                message += e
+
+        if no_scan_set:
+            message += 'These hosts do not exist in InsightVM, unable to scan: {}'.format(no_scan_set)
+
+        # Respond to Slack with result
+        log.info(message)
+        slack_client.api_call(
+            "chat.postMessage",
+            channel=item['channel'],
+            text=message
+        )
+
+        # Monitor scan for completion, simply break if scan has failed or other error
+        while True and scan_id:
+            time.sleep(60)
+            scan = helpers.retrieve_scan_status(scan_id)
+            log.info("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
+            if scan['status'] in ['running', 'integrating', 'dispatched']:
+                continue
+            else:
+                break
+
+        # Gather scan details
+        if scan['status'] == 'finished':
+            message = "<@{}> Scan ID: {} finished for {} at {}\n"
+            message += "*Scan Duration*: {} minutes\n {}\n"
+            message += "Report is being generated at https://insightvm.secops.rackspace.com/report/reports.jsp"
+            message = message.format(item['user'], scan_id, item['target_list'],
+                                     time.asctime(),
+                                     time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
+                                     scan['vulnerabilities'])
+            if scan['vulnerabilities']['total'] == 0:
+                message += helpers.get_gif()
+        else:
+            message = "<@{}> Scan ID: {} *failed* for"
+            message += " {} at {} :sob:"
+            message += "Please contact the TVA team."
+            message = message.format(item['user'], scan_id, item['target_list'], time.asctime())
+
+        # Respond in Slack with scan finished message.
+        log.info(message)
+        slack_client.api_call(
+            "chat.postMessage",
+            channel=item['channel'],
+            text=message
+        )
+
+        log.debug('Worker done.')
+        scan_tasker_queue.task_done()

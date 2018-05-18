@@ -13,9 +13,11 @@ if subfolder not in sys.path:
 
 
 # Order matters.
-from asyncdog import DataFetcher  # noqa
-from insightvm import *  # noqa.  Places functions in helpers. namespace instead of helpers.insightvm. namespace
-from utility import *  # noqa.  Places functions in helpers. namespace instead of helpers.utility. namespace
 from logger import Logger  # noqa
 from secrets import SECRETS # noqa
+from asyncdog import DataFetcher  # noqa
+# Places functions in helpers. namespace instead of helpers.insightvm. namespace
+from insightvm import *  # noqa.
+# Places functions in helpers. namespace instead of helpers.utility. namespace
+from utility import *  # noqa.
 from slack import * # noqa
