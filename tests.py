@@ -137,6 +137,15 @@ class HandleCommandTest(unittest.TestCase):
         self.assertTrue(queue.empty())
 
 
+class WorkerTest(unittest.TestCase):
+
+    def testCommandWithoutSite(self):
+        return
+
+    def testCommandWithSite(self):
+        return
+
+
 def main():
     unittest.main()
 

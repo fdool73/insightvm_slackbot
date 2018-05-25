@@ -896,27 +896,30 @@ def site_membership(site, target_list):
     '''
     targs = retrieve_included_targets_in_site(site, False)
     targs += retrieve_sites_all_included_asset_group_targets(site)
+    matches = []
     for address in target_list:
         # IP to IP matching
         if address in targs:
-            return site, address
+            matches.append((site, address))
         # IP to Hostname Matching
         elif utility.is_ip_address(address):
             try:
                 if socket.gethostbyaddr(address)[0] in targs:
-                    return site, socket.gethostbyaddr(address)[0]
+                    matches.append((site, socket.gethostbyaddr(address)[0]))
             # Handle unknown host error
             except socket.herror:
-                return 0, address
+                pass
         # Hostname to Hostname matching
         else:
             try:
                 hostname = socket.gethostbyname(address)
                 if hostname in targs:
-                    return site, hostname
+                    matches.append((site, hostname))
             # Handle unknown host error
             except socket.gaierror:
-                return 0, address
+                pass
+
+    return matches
 
 
 def generate_headers():

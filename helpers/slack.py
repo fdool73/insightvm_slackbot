@@ -1,3 +1,4 @@
+import itertools
 from joblib import Parallel, delayed
 import re
 from random import choice
@@ -140,13 +141,13 @@ def worker(scan_tasker_queue, slack_client, log):
         log.info('Retrieving target lists, this may take a while...')
 
         # Run site_membership in parrallel, this is the biggest bottleneck
+        # need to add logic for if returned list has more than one major element, if there are more that means assets were in more than one sitel
         site_asset_list = Parallel(n_jobs=10, backend="threading")(
             delayed(helpers.site_membership)(site, item['target_list'])
             for site in sites.keys())
 
         # Dedup
-        site_asset_set = set(site_asset_list)
-        site_asset_set.remove(None)
+        site_asset_set = set(list(itertools.chain(*site_asset_list)))
 
         log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
 
@@ -161,13 +162,21 @@ def worker(scan_tasker_queue, slack_client, log):
                 no_scan_set.add(site_asset_pair[1])
             target_set.add(site_asset_pair[1])
             site_set.add(site_asset_pair[0])
+            no_scan_set = set(item['target_list']) - target_set
 
         log.info('Site set: {}'.format(site_set))
         log.info('Target set: {}'.format(target_set))
+        log.info('No-scan set: {}'.format(no_scan_set))
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
         # Counting insightvm to handle different site errors.
+
+        # The list returned from parrellel processing will be a list which contains
+        # Nested lists of tuples for each site.  If the assets are in more than one
+        # site. there will be more than 1 nexted list.
+        scan_id = None
+
         if len(site_set) > 1 and 'site id:' in item['command'].lower():
             try:
                 scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':'[1])))
@@ -205,7 +214,7 @@ def worker(scan_tasker_queue, slack_client, log):
         )
 
         # Monitor scan for completion, simply break if scan has failed or other error
-        while True and scan_id:
+        while True and scan_id is not None:
             time.sleep(60)
             scan = helpers.retrieve_scan_status(scan_id)
             log.info("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
