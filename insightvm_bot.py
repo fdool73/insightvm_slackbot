@@ -86,9 +86,11 @@ if __name__ == "__main__":
         while True and insightvm_bot_id:
             try:
                 command, channel, user = helpers.parse_bot_commands(slack_client.rtm_read(), insightvm_bot_id)
+                username = slack_client.server.users.info(user)
                 if command:
-                    log.debug("Got message from Slack: {}")
-                    log.debug('{} {} {}'.format(command, channel, user))
+                    log.debug("Got message from Slack:")
+                    log.debug('Command -- {}, Channel -- {}, User -- {}'.format(
+                        command, channel, username))
                     response = helpers.handle_command(command, channel, user,
                                                       scan_tasker_queue)
 

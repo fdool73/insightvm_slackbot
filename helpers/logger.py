@@ -1,5 +1,6 @@
 
 import logging
+from logging import handlers
 import os
 import sys
 
@@ -47,3 +48,10 @@ class Logger():
 
         # Assign log level.
         self.root_logger.setLevel(log_level * 10)
+
+        # add a rotating handler
+        rotation_handler = handlers.RotatingFileHandler(
+            self.full_log_file_name,
+            maxBytes=1024 * 100,
+            backupCount=5)
+        self.root_logger.addHandler(rotation_handler)
