@@ -219,7 +219,8 @@ def worker(scan_tasker_queue, slack_client, log):
         slack_client.api_call(
             "chat.postMessage",
             channel=item['channel'],
-            text=message
+            text=message,
+            as_user=True
         )
 
         # Monitor scan for completion, simply break if scan has failed or other
@@ -255,7 +256,8 @@ def worker(scan_tasker_queue, slack_client, log):
         slack_client.api_call(
             "chat.postMessage",
             channel=item['channel'],
-            text=message
+            text=message,
+            as_user=True
         )
 
         log.debug('Worker done.')

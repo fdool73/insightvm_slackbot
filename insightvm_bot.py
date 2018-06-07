@@ -104,7 +104,7 @@ if __name__ == "__main__":
                     # Sends the response back to the channel
                     log.debug(response)
                     slack_client.api_call("chat.postMessage", channel=channel,
-                                          text=response)
+                                          text=response, as_user=True)
                 time.sleep(RTM_READ_DELAY)
             except KeyboardInterrupt:
                 log.warning('Ctl^C -- SHUTTING DOWN!')
