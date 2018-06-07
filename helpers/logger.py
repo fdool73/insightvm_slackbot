@@ -52,6 +52,6 @@ class Logger():
         # add a rotating handler
         rotation_handler = handlers.RotatingFileHandler(
             self.full_log_file_name,
-            maxBytes=1024 * 100,
+            maxBytes=1024 * 1024,  # 1MB
             backupCount=5)
         self.root_logger.addHandler(rotation_handler)

@@ -217,7 +217,7 @@ def worker(scan_tasker_queue, slack_client, log):
         while True and scan_id is not None:
             time.sleep(60)
             scan = helpers.retrieve_scan_status(scan_id)
-            log.info("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
+            log.debug("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
             if scan['status'] in ['running', 'integrating', 'dispatched']:
                 continue
             else:
@@ -227,7 +227,7 @@ def worker(scan_tasker_queue, slack_client, log):
         if scan['status'] == 'finished':
             message = "<@{}> Scan ID: {} finished for {} at {}\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
-            message += "Report is being generated at https://insightvm.secops.rackspace.com/report/reports.jsp"
+            message += "Report is being generated at https://nexpose.secops.rackspace.com/report/reports.jsp"
             message = message.format(item['user'], scan_id, item['target_list'],
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
