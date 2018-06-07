@@ -86,7 +86,11 @@ if __name__ == "__main__":
         while True and insightvm_bot_id:
             try:
                 command, channel, user = helpers.parse_bot_commands(slack_client.rtm_read(), insightvm_bot_id)
-                username = slack_client.api_call('users.info', user=user)['user']['real_name']
+                if user:
+                    user_id = user.replace('@', '')
+                    username = slack_client.api_call('users.info', user=user)['user']['real_name']
+                else:
+                    username = None
                 if command:
                     log.debug("Got message from Slack:")
                     log.debug('Command -- {}, Channel -- {}, User -- {}'.format(
