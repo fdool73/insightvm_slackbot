@@ -193,7 +193,7 @@ def worker(scan_tasker_queue, slack_client, log):
         elif len(site_set) > 1:
             message = '<@{}> Assets exist in multiple sites ({}). '
             message += 'Please re-run command with '
-            message += '`@insightvm_bot scan <IPs> site id:<ID>``'
+            message += '`@nexpose_bot scan <IPs> site id:<ID>``'
             message = message.format(item['user'], site_set)
         # All assets do not exist in Nexpose
         elif len(site_set) == 0:
