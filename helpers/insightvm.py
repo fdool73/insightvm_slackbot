@@ -871,6 +871,9 @@ def adhoc_site_scan(ip_list, site):
     response = requests.post(url, auth=AUTH, json=payload, headers=generate_headers())
     json_response = json.loads(response.text)
 
+    # For some reason, this response code does not match the docs.
+    # Docs state you should get a 200 response for a successful scan start
+    # Testing indicates the proper response is 201: HTTP CREATED code.
     if not response.status_code == 201:
         raise SystemError(json_response['message'])
 
@@ -887,6 +890,7 @@ def retrieve_scan_status(scan_id):
     response = requests.get(url, auth=AUTH, headers=generate_headers())
     json_response = json.loads(response.text)
 
+    # Return more than just the status since there is additional useful info.
     return json_response
 
 

@@ -80,17 +80,20 @@ if __name__ == "__main__":
         if not insightvm_bot_id:
             log.error('Failed Slack auth test -- exiting')
             sys.exit()
-
         log.debug('Passed Slack auth test')
+
         # Listen to Slack, receive and parse messages
         while True and insightvm_bot_id:
             try:
                 command, channel, user = helpers.parse_bot_commands(slack_client.rtm_read(), insightvm_bot_id)
+                # Translate user_id to Real Name for logging
                 if user:
                     user_id = user.replace('@', '')
                     username = slack_client.api_call('users.info', user=user)['user']['real_name']
                 else:
                     username = None
+
+                # Handle incomming commands.
                 if command:
                     log.debug("Got message from Slack:")
                     log.debug('Command -- {}, Channel -- {}, User -- {}'.format(

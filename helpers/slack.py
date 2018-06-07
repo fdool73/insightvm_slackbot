@@ -133,26 +133,28 @@ def worker(scan_tasker_queue, slack_client, log):
         if item is None:
             break
 
-        # Determine site for IDs.
+        # Determine site membership for the requested targets
         # List placeholder, parrallel function returns a list of outputs
         site_asset_set = []
         log.info("Getting list of all sites.")
+        # First get all site IDs since asset site membership is not exposed
+        # anywhere in the API.
         sites = helpers.retrieve_all_site_ids()
         log.info('Retrieving target lists, this may take a while...')
 
         # Run site_membership in parrallel, this is the biggest bottleneck
-        # need to add logic for if returned list has more than one major element, if there are more that means assets were in more than one sitel
+        # Take the target set and see if those assets are included targets in
+        # EVERY site.  Not pretty, but necesary given API limitations.
         site_asset_list = Parallel(n_jobs=10, backend="threading")(
             delayed(helpers.site_membership)(site, item['target_list'])
             for site in sites.keys())
 
-        # Dedup
+        # Dedup and cleanup.
         site_asset_set = set(list(itertools.chain(*site_asset_list)))
-
         log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
 
-        # Parse site and address to determine any assets that do not live
-        # in InsightVM.
+        # Parse site and address to get final site to scan, assets to scan,
+        # and assets that will not be scanned due to not existing.
         target_set = set()
         site_set = set()
         no_scan_set = set()
@@ -170,13 +172,16 @@ def worker(scan_tasker_queue, slack_client, log):
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
-        # Counting insightvm to handle different site errors.
+        # Counting on InsightVM to handle different site errors server-side.
 
-        # The list returned from parrellel processing will be a list which contains
-        # Nested lists of tuples for each site.  If the assets are in more than one
-        # site. there will be more than 1 nexted list.
+        # If `site_set` has more than one site, then we know that the assets to
+        # be scanned either reside in multiple sites or any single asset has
+        # multiple site memberships.  We cannot scan in this situation and must
+        # Get a site ID. Logic below responds with that guidance and parses it
+        # if it exists.
         scan_id = None
 
+        # Assets in multiple sites but site ID provided.
         if len(site_set) > 1 and 'site id:' in item['command'].lower():
             try:
                 scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':'[1])))
@@ -184,16 +189,19 @@ def worker(scan_tasker_queue, slack_client, log):
             except SystemError as e:
                 message = "<@{}> Scan ID: {} produced an error".format(item['user'])
                 message += e
+        # Assets in multiple sites but NO site ID provided.
         elif len(site_set) > 1:
             message = '<@{}> Assets exist in multiple sites ({}). '
             message += 'Please re-run command with '
             message += '`@insightvm_bot scan <IPs> site id:<ID>``'
             message = message.format(item['user'], site_set)
+        # All assets do not exist in Nexpose
         elif len(site_set) == 0:
             message = '<@{}> scan for {} *failed*.'
             message += '  Device(s) do not exist in insightvm :confounded:'
             message += ' Device must have been scanned previously through a normal scan.'
             message = message.format(item['user'], item['target_list'])
+        # All assets live in one site
         else:
             try:
                 scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
@@ -202,6 +210,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 message = "<@{}> Scan produced an error".format(item['user'])
                 message += e
 
+        # Indicate if some assets were not scanned due to no existing in Nexpose.
         if no_scan_set:
             message += 'These hosts do not exist in InsightVM, unable to scan: {}'.format(no_scan_set)
 
@@ -213,7 +222,8 @@ def worker(scan_tasker_queue, slack_client, log):
             text=message
         )
 
-        # Monitor scan for completion, simply break if scan has failed or other error
+        # Monitor scan for completion, simply break if scan has failed or other
+        # error. Only do this if a scan_id was returned indicating a scan started.
         while True and scan_id is not None:
             time.sleep(60)
             scan = helpers.retrieve_scan_status(scan_id)

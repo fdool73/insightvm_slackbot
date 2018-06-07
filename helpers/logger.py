@@ -49,7 +49,7 @@ class Logger():
         # Assign log level.
         self.root_logger.setLevel(log_level * 10)
 
-        # add a rotating handler
+        # Add a rotating handler.
         rotation_handler = handlers.RotatingFileHandler(
             self.full_log_file_name,
             maxBytes=1024 * 1024,  # 1MB
