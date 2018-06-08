@@ -30,8 +30,7 @@ class Logger():
         logging.basicConfig(
             level=log_level * 10,
             format="%(asctime)s [%(threadName)-12.12s] [%(levelname)s] %(message)s",
-            handlers=[logging.FileHandler(self.full_log_file_name),
-                      logging.StreamHandler(),
+            handlers=[logging.StreamHandler(),
                       handlers.RotatingFileHandler(
                           self.full_log_file_name,
                           maxBytes=1024 * 1024,  # 1MB
