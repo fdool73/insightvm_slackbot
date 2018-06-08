@@ -244,7 +244,7 @@ def worker(scan_tasker_queue, slack_client, log):
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
                                      scan['vulnerabilities'])
             if scan['vulnerabilities']['total'] == 0:
-                message += helpers.get_gif()
+                message += ' ' + helpers.get_gif()
         else:
             message = "<@{}> Scan ID: {} *failed* for"
             message += " {} at {} :sob:"
