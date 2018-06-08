@@ -88,7 +88,7 @@ def handle_command(command, channel, user, queue):
     """
 
     # Default response is help text for the user
-    response = "<@{}> Not sure what you mean. Try *@nexpose_bot {}*.".format(user, EXAMPLE_COMMAND)
+    response = "<@{}> Not sure what you mean. Try *@nexpose_bot scan <IP/Hostname>*.".format(user)
 
     # Test to see if IPs are in the command
     ip_list = extract_ips(command)
@@ -98,7 +98,7 @@ def handle_command(command, channel, user, queue):
     # Finds and executes the given command, filling in response
     # Check if the IP list exists and is not longer than 5 IPs
     if (command.startswith(EXAMPLE_COMMAND) and target_list and len(target_list) > 5):
-        response = 'Please limit your ad hoc scan to 5 or less IPs.'
+        response = 'Please limit your ad hoc scan to 5 or less targets.'
 
     # Check if list has proper list of IPs and schedule scan
     elif target_list and command.startswith(EXAMPLE_COMMAND):
@@ -114,7 +114,7 @@ def handle_command(command, channel, user, queue):
     # Check if no IPs were supplied and show usage
     elif command.startswith(EXAMPLE_COMMAND):
         response = "<@{}> Sure...what IPs would you like to scan?\n".format(user)
-        response += 'Use `scan <IP Address>`'
+        response += 'Use `scan <IP Address/Hostname>`'
 
     return response
 
