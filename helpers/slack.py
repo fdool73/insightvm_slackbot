@@ -184,7 +184,7 @@ def worker(scan_tasker_queue, slack_client, log):
         # Assets in multiple sites but site ID provided.
         if len(site_set) > 1 and 'site id:' in item['command'].lower():
             try:
-                scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':'[1])))
+                scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
                 message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
             except SystemError as e:
                 message = "<@{}> Scan ID: {} produced an error".format(item['user'])
