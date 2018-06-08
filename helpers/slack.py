@@ -238,13 +238,13 @@ def worker(scan_tasker_queue, slack_client, log):
         if scan['status'] == 'finished':
             message = "<@{}> Scan ID: {} finished for {} at {}\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
-            message += "Report is being generated at https://nexpose.secops.rackspace.com/report/reports.jsp"
+            message += "Report is being generated at https://nexpose.secops.rackspace.com/report/reports.jsp "
             message = message.format(item['user'], scan_id, item['target_list'],
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
                                      scan['vulnerabilities'])
             if scan['vulnerabilities']['total'] == 0:
-                message += ' ' + helpers.get_gif()
+                message += helpers.get_gif()
         else:
             message = "<@{}> Scan ID: {} *failed* for"
             message += " {} at {} :sob:"
