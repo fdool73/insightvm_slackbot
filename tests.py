@@ -38,7 +38,7 @@ class ParseCommandTest(unittest.TestCase):
 
     invalid_event = [{
         'type': 'desktop_notification',
-        'title': 'Rackspace',
+        'title': 'Company Name',
         'subtitle': 'nexpose_bot_test',
         'msg': '1526665992.000620',
         'content': 'Trevor Steen: @InsightVM Scan Bot scan something',

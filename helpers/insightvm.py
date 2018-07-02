@@ -760,7 +760,7 @@ def wait_until_report_finishes_being_generated(report_id):
 def get_full_engineer_report_name_from_site_name(site_name):
     """Returns the full engineer report name given a site name.
     """
-    engineer_csv_report_name = '*Rackspace TVA Vulnerability Report for Engineers - ' + site_name
+    engineer_csv_report_name = 'Vulnerability Report for Engineers - ' + site_name
     return engineer_csv_report_name
 
 
