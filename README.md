@@ -14,6 +14,7 @@ This guide sums bot creation up pretty simply. https://www.fullstackpython.com/b
 ## Set up virtual environment
 ```bash
 git clone git@github.com:rackerlabs/insightvm_slackbot.git
+cd insightvm_slackbot
 virtualenv -p /usr/bin/python3 .venv
 source .venv/bin/activate
 pip install -r requirements/common.txt
