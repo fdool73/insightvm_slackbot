@@ -24,7 +24,6 @@ pip install -r requirements/dev.txt
 
 ## Install helpers package
 ```bash
-cd insight-scripts/
 python setup.py install
 ```
 
@@ -32,7 +31,8 @@ python setup.py install
 ```bash
 cd keys/
 cp secrets.json.empty secrets.json
-vi secrets.json
+vim secrets.json
+cd ../
 ```
 All values are required.
 
