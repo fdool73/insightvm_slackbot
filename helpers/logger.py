@@ -19,7 +19,7 @@ class Logger():
         if not write_log:
             print("Directory did not exist; Creating: {}".format(self.log_file_base_dir))
 
-            #Check is log dir is writable, if not, just log to STDOUT
+            # Check is log dir is writable, if not, just log to STDOUT
             try:
                 os.makedirs(self.log_file_base_dir)
                 write_log = True
