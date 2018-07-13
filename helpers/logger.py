@@ -24,6 +24,7 @@ class Logger():
                 os.makedirs(self.log_file_base_dir)
                 write_log = True
             except PermissionError:
+                print("Insufficient permissions for {}. Logging to STDOUT only".format(self.log_file_base_dir))
                 write_log = False
 
         if log_level not in range(0, 6):
