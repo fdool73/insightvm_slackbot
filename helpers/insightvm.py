@@ -864,6 +864,7 @@ def adhoc_site_scan(ip_list, site):
         ],
         "name": "Slackbot Scan",
     }
+
     for ip in ip_list:
         payload['hosts'].append(ip)
 

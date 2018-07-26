@@ -35,6 +35,25 @@ def extract_hostnames(input_string):
     return hostname_matches
 
 
+def extract_site_id(input_string):
+    """
+    Regex function to find a Site ID in a string.  Basically looks for the word
+    'site' and a single integer number.
+    """
+
+    if 'site' in input_string.lower():
+        wordlist = input_string.split()
+        site_id = wordlist[wordlist.index('site') + 1]
+    else:
+        return None
+
+    try:
+        int(site_id)
+        return int(site_id)
+    except ValueError:
+        return None
+
+
 def get_gif():
     '''
     Select a random GIF from this list of SFW images
@@ -88,12 +107,15 @@ def handle_command(command, channel, user, queue):
     """
 
     # Default response is help text for the user
-    response = "<@{}> Not sure what you mean. Try *@nexpose_bot scan <IP/Hostname>*.".format(user)
+    response = "<@{}> Not sure what you mean! Try *@nexpose_bot scan <IP/Hostname>*.".format(user)
 
     # Test to see if IPs are in the command
     ip_list = extract_ips(command)
     hostname_list = extract_hostnames(command)
     target_list = ip_list + hostname_list
+
+    # Test to see if Site ID is in the command
+    site_id = extract_site_id(command)
 
     # Finds and executes the given command, filling in response
     # Check if the IP list exists and is not longer than 5 IPs
@@ -106,8 +128,21 @@ def handle_command(command, channel, user, queue):
         response += '  :partyparrot:'
 
         # Write data to queue
-        queue.put({'command': command,
+        queue.put({'site_scan': False,
+                   'command': command,
                    'target_list': target_list,
+                   'channel': channel,
+                   'user': user})
+
+    # Check if this is a site scan
+    elif command.startswith(EXAMPLE_COMMAND) and 'site' in command.lower() and site_id:
+        response = "<@{}> Scheduling scan for Site ID: {}.".format(user, site_id)
+        response += '  :partyparrot:'
+
+        # Write data to queue
+        queue.put({'site_scan': True,
+                   'command': command,
+                   'target_list': [site_id],
                    'channel': channel,
                    'user': user})
 
@@ -133,61 +168,57 @@ def worker(scan_tasker_queue, slack_client, log):
         if item is None:
             break
 
-        # Determine site membership for the requested targets
-        # List placeholder, parrallel function returns a list of outputs
-        site_asset_set = []
-        log.info("Getting list of all sites.")
-        # First get all site IDs since asset site membership is not exposed
-        # anywhere in the API.
-        sites = helpers.retrieve_all_site_ids()
-        log.info('Retrieving target lists, this may take a while...')
-
-        # Run site_membership in parrallel, this is the biggest bottleneck
-        # Take the target set and see if those assets are included targets in
-        # EVERY site.  Not pretty, but necesary given API limitations.
-        site_asset_list = Parallel(n_jobs=10, backend="threading")(
-            delayed(helpers.site_membership)(site, item['target_list'])
-            for site in sites.keys())
-
-        # Dedup and cleanup.
-        site_asset_set = set(list(itertools.chain(*site_asset_list)))
-        log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
-
-        # Parse site and address to get final site to scan, assets to scan,
-        # and assets that will not be scanned due to not existing.
+        # Common vars
         target_set = set()
         site_set = set()
         no_scan_set = set()
-        # Get actual targets and site
-        for site_asset_pair in site_asset_set:
-            if site_asset_pair[0] == 0:
-                no_scan_set.add(site_asset_pair[1])
-            target_set.add(site_asset_pair[1])
-            site_set.add(site_asset_pair[0])
-            no_scan_set = set(item['target_list']) - target_set
+        if not item['site_scan']:
+            # Determine site for IDs.
+            # List placeholder, parrallel function returns a list of outputs
+            site_asset_set = []
+            log.info("Getting list of all sites.")
+            sites = helpers.retrieve_all_site_ids()
+            log.info('Retrieving target lists, this may take a while...')
 
-        log.info('Site set: {}'.format(site_set))
-        log.info('Target set: {}'.format(target_set))
-        log.info('No-scan set: {}'.format(no_scan_set))
+            # Run site_membership in parrallel, this is the biggest bottleneck
+            site_asset_list = Parallel(n_jobs=10, backend="threading")(
+                delayed(helpers.site_membership)(site, item['target_list'])
+                for site in sites.keys())
+
+            # Dedup
+            site_asset_set = set(list(itertools.chain(*site_asset_list)))
+            log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
+
+            # Parse site and address to determine any assets that do not live
+            # in InsightVM.
+
+            # Get actual targets and site
+            for site_asset_pair in site_asset_set:
+                if site_asset_pair[0] == 0:
+                    no_scan_set.add(site_asset_pair[1])
+                target_set.add(site_asset_pair[1])
+                site_set.add(site_asset_pair[0])
+                no_scan_set = set(item['target_list']) - target_set
+
+            log.info('Site set: {}'.format(site_set))
+            log.info('Target set: {}'.format(target_set))
+            log.info('No-scan set: {}'.format(no_scan_set))
+        elif item['site_scan']:
+            site_set.add(item['target_list'][0])
+            log.info('Site set: {}'.format(site_set))
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
-        # Counting on InsightVM to handle different site errors server-side.
+        # Counting on InsightVM to handle different site errors.
 
-        # If `site_set` has more than one site, then we know that the assets to
-        # be scanned either reside in multiple sites or any single asset has
-        # multiple site memberships.  We cannot scan in this situation and must
-        # Get a site ID. Logic below responds with that guidance and parses it
-        # if it exists.
         scan_id = None
 
-        # Assets in multiple sites but site ID provided.
         if len(site_set) > 1 and 'site id:' in item['command'].lower():
             try:
                 scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
                 message = "<@{}> Scan ID: {} started. ".format(item['user'], scan_id)
             except SystemError as e:
-                message = "<@{}> Scan ID: {} produced an error".format(item['user'])
+                message = "<@{}> Scan ID: {} produced an error. ".format(item['user'])
                 message += e
         # Assets in multiple sites but NO site ID provided.
         elif len(site_set) > 1:
@@ -207,8 +238,8 @@ def worker(scan_tasker_queue, slack_client, log):
                 scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
                 message = "<@{}> Scan ID: {} started. ".format(item['user'], scan_id)
             except SystemError as e:
-                message = "<@{}> Scan produced an error".format(item['user'])
-                message += e
+                message = "<@{}> Scan produced an error. ".format(item['user'])
+                message += str(e)
 
         # Indicate if some assets were not scanned due to no existing in Nexpose.
         if no_scan_set:
@@ -238,7 +269,6 @@ def worker(scan_tasker_queue, slack_client, log):
         if scan['status'] == 'finished':
             message = "<@{}> Scan ID: {} finished for {} at {} UTC\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
-            message += "Report is being generated at <insert link to reports page> "
             message = message.format(item['user'], scan_id, item['target_list'],
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
@@ -248,7 +278,7 @@ def worker(scan_tasker_queue, slack_client, log):
         else:
             message = "<@{}> Scan ID: {} *failed* for"
             message += " {} at {} :sob:"
-            message += "Please contact the TVA team."
+            message += "Please contact the Security team."
             message = message.format(item['user'], scan_id, item['target_list'], time.asctime())
 
         # Respond in Slack with scan finished message.
