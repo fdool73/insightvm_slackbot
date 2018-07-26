@@ -38,7 +38,7 @@ class ParseCommandTest(unittest.TestCase):
 
     invalid_event = [{
         'type': 'desktop_notification',
-        'title': 'Company Name',
+        'title': 'Company',
         'subtitle': 'nexpose_bot_test',
         'msg': '1526665992.000620',
         'content': 'Trevor Steen: @InsightVM Scan Bot scan something',
@@ -135,6 +135,21 @@ class HandleCommandTest(unittest.TestCase):
 
         self.assertIn('like to', response)
         self.assertTrue(queue.empty())
+
+
+class ExtractSiteIdTest(unittest.TestCase):
+
+    def testValidCommand(self):
+        command = 'scan site 123'
+        self.assertEqual(helpers.extract_site_id(command), 123)
+
+    def testInvalidCommand(self):
+        command = 'scan something 123'
+        self.assertIsNone(helpers.extract_site_id(command))
+
+    def testBadCommand(self):
+        command = 'scan site 12a3'
+        self.assertIsNone(helpers.extract_site_id(command))
 
 
 class WorkerTest(unittest.TestCase):
