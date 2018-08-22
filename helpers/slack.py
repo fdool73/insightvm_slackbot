@@ -5,6 +5,7 @@ from random import choice
 import time
 
 import helpers
+from secrets import SECRETS
 
 
 EXAMPLE_COMMAND = "scan"
@@ -51,6 +52,18 @@ def extract_site_id(input_string):
         int(site_id)
         return int(site_id)
     except ValueError:
+        return None
+
+def extract_vuln_id(input_string):
+    """
+    Function to extract a vulnerability ID from a message
+    """
+
+    if 'fp' in input_string.lower():
+        wordlist = input_string.split()
+        vuln_id = wordlist[-1]
+        return vuln_id
+    else:
         return None
 
 
@@ -114,8 +127,9 @@ def handle_command(command, channel, user, queue):
     hostname_list = extract_hostnames(command)
     target_list = ip_list + hostname_list
 
-    # Test to see if Site ID is in the command
+    # Test to see if Site ID or Vuln ID is in the command
     site_id = extract_site_id(command)
+    vuln_id = extract_vuln_id(command)
 
     # Finds and executes the given command, filling in response
     # Check if the IP list exists and is not longer than 5 IPs
@@ -124,7 +138,7 @@ def handle_command(command, channel, user, queue):
 
     # Check if list has proper list of IPs and schedule scan
     elif target_list and command.startswith(EXAMPLE_COMMAND):
-        response = "<@{}> Scheduling scan for: {}.".format(user, ','.join(target_list))
+        response = "<@{}> Scheduling scan for: `{}`.".format(user, ', '.join(target_list))
         response += '  :partyparrot:'
 
         # Write data to queue
@@ -150,6 +164,18 @@ def handle_command(command, channel, user, queue):
     elif command.startswith(EXAMPLE_COMMAND):
         response = "<@{}> Sure...what IPs would you like to scan?\n".format(user)
         response += 'Use `scan <IP Address/Hostname>`'
+
+    # Check if this is a False Positive scan
+    elif command.lower().startswith('fp'):
+        response = "<@{}> Scheduling False Positive scan/reporting for: {}.".format(user, ','.join(target_list))
+
+        queue.put({'site_scan': False,
+                   'false_positive': True,
+                   'vuln_id': vuln_id,
+                   'command': command,
+                   'target_list': target_list,
+                   'channel': channel,
+                   'user': user})
 
     return response
 
@@ -194,8 +220,6 @@ def worker(scan_tasker_queue, slack_client, log):
 
             # Get actual targets and site
             for site_asset_pair in site_asset_set:
-                if site_asset_pair[0] == 0:
-                    no_scan_set.add(site_asset_pair[1])
                 target_set.add(site_asset_pair[1])
                 site_set.add(site_asset_pair[0])
                 no_scan_set = set(item['target_list']) - target_set
@@ -209,16 +233,16 @@ def worker(scan_tasker_queue, slack_client, log):
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
-        # Counting on InsightVM to handle different site errors.
+        # Counting insightvm to handle different site errors.
 
         scan_id = None
 
         if len(site_set) > 1 and 'site id:' in item['command'].lower():
             try:
                 scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
-                message = "<@{}> Scan ID: {} started. ".format(item['user'], scan_id)
+                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
             except SystemError as e:
-                message = "<@{}> Scan ID: {} produced an error. ".format(item['user'])
+                message = "<@{}> Scan ID: {} produced an error".format(item['user'])
                 message += e
         # Assets in multiple sites but NO site ID provided.
         elif len(site_set) > 1:
@@ -235,15 +259,22 @@ def worker(scan_tasker_queue, slack_client, log):
         # All assets live in one site
         else:
             try:
-                scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
-                message = "<@{}> Scan ID: {} started. ".format(item['user'], scan_id)
+                if 'false_positive' in item:
+                    scan_id = helpers.adhoc_site_scan(
+                        target_set,
+                        site_set.pop(),
+                        SECRETS['insightvm']['fp_template_id']
+                    )
+                else:
+                    scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
+                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
             except SystemError as e:
-                message = "<@{}> Scan produced an error. ".format(item['user'])
+                message = "<@{}> Scan produced an error".format(item['user'])
                 message += str(e)
 
         # Indicate if some assets were not scanned due to no existing in Nexpose.
         if no_scan_set:
-            message += 'These hosts do not exist in InsightVM, unable to scan: {}'.format(no_scan_set)
+            message += ' These hosts do not exist in InsightVM, unable to scan: `{}`'.format(', '.join(no_scan_set))
 
         # Respond to Slack with result
         log.info(message)
@@ -266,16 +297,30 @@ def worker(scan_tasker_queue, slack_client, log):
                 break
 
         # Gather scan details
-        if scan['status'] == 'finished':
-            message = "<@{}> Scan ID: {} finished for {} at {} UTC\n"
+        if scan_id is not None and scan['status'] == 'finished':
+            message = "<@{}> Scan ID: {} finished for `{}` at {} UTC\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
-            message = message.format(item['user'], scan_id, item['target_list'],
+            message += "Report is being generated at https://nexpose.secops.rackspace.com/report/reports.jsp "
+            message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
                                      time.asctime(),
                                      time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
                                      scan['vulnerabilities'])
             if scan['vulnerabilities']['total'] == 0:
                 message += helpers.get_gif()
-        else:
+            if 'false_positive' in item:
+                xml_report = helpers.generate_xml2_report(scan_id)
+                scan_log_data = helpers.get_scan_logs(scan_id)
+                email_body = 'Please see attached logs related to a false positive for {} '.format(item['vuln_id'])
+                email_body += "Attachments are XML2 Report and Scan Data Export "
+                email_body += "including scan logs."
+                attachments = {"XML-Report.xml": xml_report, "Scan-Logs.zip": scan_log_data}
+                helpers.send_email(SECRETS['insightvm']['fp_email'],  # This is expecting a comma separated string, not a list.
+                                   subject='False Positive Report For {}'.format(item['vuln_id']),
+                                   body=email_body,
+                                   attachments=attachments,
+                                   port=587)
+
+        elif scan_id is not None:
             message = "<@{}> Scan ID: {} *failed* for"
             message += " {} at {} :sob:"
             message += "Please contact the Security team."

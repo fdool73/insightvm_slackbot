@@ -31,6 +31,10 @@ class Logger():
             print("[-] Invalid loglevel '{}'.  Must be 1-5 inclusive.".format(log_level))
             sys.exit(0)
 
+        # Minimize Python requests (and the underlying urllib3 library) logging level.
+        logging.getLogger("requests").setLevel(logging.WARN)
+        logging.getLogger("urllib3").setLevel(logging.WARN)
+
         if write_log:
             self.log_file_name = 'slackbot.log'
 
