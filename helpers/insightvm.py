@@ -255,7 +255,10 @@ def retrieve_targets_in_asset_group(asset_group_id, verbose=True):
 
         for address in json_response['addresses']:
             targets.append(address['ip'])
-        targets.append(json_response['hostName'])
+        try:
+            targets.append(json_response['hostName'])
+        except KeyError:
+            pass
 
     if verbose:
         print("[*] Retrieved {0} targets in asset group ID: {1}".format(len(targets), asset_group_id))
@@ -751,17 +754,10 @@ def wait_until_report_finishes_being_generated(report_id):
     """Given a report ID, sleep until the report finishes being generated.
     """
 
-    while retrieve_report_status(report_id) == 'started':
+    while retrieve_report_status(report_id) in ['running', 'integrating', 'dispatched', 'started']:
         sleep_seconds = 60
         print("[-] Report ID '{0}' is still being generated...sleeping {1} seconds.".format(report_id, sleep_seconds))
         time.sleep(sleep_seconds)
-
-
-def get_full_engineer_report_name_from_site_name(site_name):
-    """Returns the full engineer report name given a site name.
-    """
-    engineer_csv_report_name = 'Vulnerability Report for Engineers - ' + site_name
-    return engineer_csv_report_name
 
 
 def find_insightvm_report_full_file_path_on_console(report_id):
@@ -855,7 +851,7 @@ def retrieve_all_site_ids():
     return site_ids
 
 
-def adhoc_site_scan(ip_list, site):
+def adhoc_site_scan(ip_list, site, template_id=""):
     """Scan a subset of IPs for a given site.
     """
 
@@ -867,6 +863,9 @@ def adhoc_site_scan(ip_list, site):
 
     for ip in ip_list:
         payload['hosts'].append(ip)
+
+    if template_id:
+        payload['templateId'] = template_id
 
     url = '{}/api/3/sites/{}/scans'.format(BASE_URL, site)
     response = requests.post(url, auth=AUTH, json=payload, headers=generate_headers())
@@ -903,6 +902,8 @@ def site_membership(site, target_list):
     targs += retrieve_sites_all_included_asset_group_targets(site)
     matches = []
     for address in target_list:
+        if address is None:
+            continue
         # IP to IP matching
         if address in targs:
             matches.append((site, address))
@@ -925,6 +926,66 @@ def site_membership(site, target_list):
                 pass
 
     return matches
+
+
+def generate_xml2_report(scan_id):
+    '''Updates, generates, waits, and then downloads an XML2 report. Primarily
+    for use with False Positive reporting.
+    '''
+    payload = {
+        "filters": {
+            "severity": "all",
+            "statuses": [
+                "potentially-vulnerable",
+                "vulnerable",
+                "vulnerable-version"
+            ]
+        },
+        "format": "xml-export-v2",
+        "frequency": {
+            "type": "none"
+        },
+        "language": "en-US",
+        "name": "XML Export for False Positive",
+        "scope": {
+            "assetsInOnlyMostRecentScanOfSite": False,
+            "scan": scan_id
+            }
+        }
+
+    report_id = SECRETS['insightvm']['fp_report_id']
+
+    # Configure the report with appropriate scope
+    url = '{}/api/3/reports/{}'.format(BASE_URL, report_id)
+    response = requests.put(url, auth=AUTH, json=payload, headers=generate_headers())
+
+    # Generate the report
+    url = '{}/api/3/reports/{}/generate'.format(BASE_URL, report_id)
+    response = requests.post(url, auth=AUTH, json=payload, headers=generate_headers())
+
+    wait_until_report_finishes_being_generated(report_id)
+
+    # Get the report history with link
+    url = '{}/api/3/reports/{}/history'.format(BASE_URL, report_id)
+    response = requests.get(url, auth=AUTH, json=payload, headers=generate_headers())
+
+    # Newest is last so get last URI
+    for i in response.json()['resources']:
+        report_link = i['uri']
+
+    # Get report
+    xml_report =  requests.get(report_link, auth=AUTH, headers=generate_headers())
+
+    return xml_report.content
+
+
+def get_scan_logs(scan_id):
+    '''Gets the scan logs from the provided scan ID.
+    '''
+    url = "{}/data/scan/{}/export".format(BASE_URL, scan_id)
+    export_data = requests.get(url, auth=AUTH, headers=generate_headers())
+
+    return export_data.content
 
 
 def generate_headers():

@@ -1,13 +1,21 @@
 # Standard Python libraries.
+import email
+import logging
 import gzip
 import ipaddress
 import os
+import smtplib
 import time
+
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # Third party Python libraries.
 
 
 # Custom Python libraries.
+from secrets import SECRETS
 
 
 def csv_list(sample_string):
@@ -91,3 +99,62 @@ def gzip_decompress(gz_file, dest_folder, new_file_name):
         with gzip.open(gz_file, 'rb') as gzf:
             file_content = gzf.read()
             fh.write(file_content)
+
+
+def send_email(to_addresses,  # This is expecting a comma separated string, not a list.
+               subject='',
+               body='',
+               attachments={},
+               from_address=SECRETS['email']['from_address'],
+               smtp_server=SECRETS['email']['smtp_server'],
+               port=25,
+               debug=False):
+    """Specifies the default email config, and sends an email. Returns True
+    if the email is sent successfully, False otherwise.
+    """
+
+    if not isinstance(to_addresses, str):
+        logging.error("Utility Helper Error: Receivers' addresses must be a comma separated string of addresses.")
+        return False
+
+    if not isinstance(from_address, str):
+        logging.error("Utility Helper Error: From address must be a string.")
+        return False
+
+    # Create a server instance.
+    server = smtplib.SMTP(smtp_server, port)
+
+    # Enable debugging option.
+    if debug:
+        server.set_debuglevel(True)
+
+    message = MIMEMultipart()
+    message['From'] = from_address
+    message['To'] = to_addresses
+    message['Subject'] = subject
+
+    for a in attachments:
+        file = MIMEBase('application', 'octet-stream')
+        try:
+            with open(attachments[a]) as f:
+                file.set_payload(f.read())
+                file.add_header('Content-Disposition', 'attachment',
+                                filename=os.path.basename(attachments[a]))
+        except (FileNotFoundError, OSError, ValueError):
+            file.set_payload(attachments[a])
+            file.add_header('Content-Disposition', 'attachment',
+                            filename=a)
+
+        email.encoders.encode_base64(file)
+        message.attach(file)
+
+    message.attach(MIMEText(body))
+
+    try:
+        server.sendmail(from_address, to_addresses.split(','), message.as_string())
+        server.quit()
+    except Exception as e:
+        logging.error("Error sending email: {}".format(e))
+        return False
+
+    return True
