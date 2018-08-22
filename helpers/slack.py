@@ -233,7 +233,7 @@ def worker(scan_tasker_queue, slack_client, log):
 
         # Check if assets reside in more than one site, prompt for additional
         # info if needed.  All assets should/must reside in one common site.
-        # Counting insightvm to handle different site errors.
+        # Counting on InsightVM to handle different site errors.
 
         scan_id = None
 
