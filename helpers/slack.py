@@ -54,6 +54,7 @@ def extract_site_id(input_string):
     except ValueError:
         return None
 
+
 def extract_vuln_id(input_string):
     """
     Function to extract a vulnerability ID from a message
@@ -187,157 +188,160 @@ def worker(scan_tasker_queue, slack_client, log):
     results.
     """
     while True:
-        # Get item off the queue, exit if nothing queued.
-        item = scan_tasker_queue.get()
-        log.debug('Worker started and got item from queue.')
-        log.debug("Got {} targets from command.".format(len(item['target_list'])))
-        if item is None:
-            break
-
-        # Common vars
-        target_set = set()
-        site_set = set()
-        no_scan_set = set()
-        if not item['site_scan']:
-            # Determine site for IDs.
-            # List placeholder, parrallel function returns a list of outputs
-            site_asset_set = []
-            log.info("Getting list of all sites.")
-            sites = helpers.retrieve_all_site_ids()
-            log.info('Retrieving target lists, this may take a while...')
-
-            # Run site_membership in parrallel, this is the biggest bottleneck
-            site_asset_list = Parallel(n_jobs=10, backend="threading")(
-                delayed(helpers.site_membership)(site, item['target_list'])
-                for site in sites.keys())
-
-            # Dedup
-            site_asset_set = set(list(itertools.chain(*site_asset_list)))
-            log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
-
-            # Parse site and address to determine any assets that do not live
-            # in InsightVM.
-
-            # Get actual targets and site
-            for site_asset_pair in site_asset_set:
-                target_set.add(site_asset_pair[1])
-                site_set.add(site_asset_pair[0])
-                no_scan_set = set(item['target_list']) - target_set
-
-            log.info('Site set: {}'.format(site_set))
-            log.info('Target set: {}'.format(target_set))
-            log.info('No-scan set: {}'.format(no_scan_set))
-        elif item['site_scan']:
-            site_set.add(item['target_list'][0])
-            log.info('Site set: {}'.format(site_set))
-
-        # Check if assets reside in more than one site, prompt for additional
-        # info if needed.  All assets should/must reside in one common site.
-        # Counting on InsightVM to handle different site errors.
-
-        scan_id = None
-
-        if len(site_set) > 1 and 'site id:' in item['command'].lower():
-            try:
-                scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
-                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
-            except SystemError as e:
-                message = "<@{}> Scan ID: {} produced an error".format(item['user'])
-                message += e
-        # Assets in multiple sites but NO site ID provided.
-        elif len(site_set) > 1:
-            message = '<@{}> Assets exist in multiple sites ({}). '
-            message += 'Please re-run command with '
-            message += '`@nexpose_bot scan <IPs> site id:<ID>``'
-            message = message.format(item['user'], site_set)
-        # All assets do not exist in Nexpose
-        elif len(site_set) == 0:
-            message = '<@{}> scan for {} *failed*.'
-            message += '  Device(s) do not exist in insightvm :confounded:'
-            message += ' Device must have been scanned previously through a normal scan.'
-            message = message.format(item['user'], item['target_list'])
-        # All assets live in one site
-        else:
-            try:
-                if 'false_positive' in item:
-                    scan_id = helpers.adhoc_site_scan(
-                        target_set,
-                        site_set.pop(),
-                        SECRETS['insightvm']['fp_template_id']
-                    )
-                else:
-                    scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
-                message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
-            except SystemError as e:
-                message = "<@{}> Scan produced an error".format(item['user'])
-                message += str(e)
-
-        # Indicate if some assets were not scanned due to no existing in Nexpose.
-        if no_scan_set:
-            message += ' These hosts do not exist in InsightVM, unable to scan: `{}`'.format(', '.join(no_scan_set))
-
-        # Respond to Slack with result
-        log.info(message)
-        slack_client.api_call(
-            "chat.postMessage",
-            channel=item['channel'],
-            text=message,
-            as_user=True
-        )
-
-        # Monitor scan for completion, simply break if scan has failed or other
-        # error. Only do this if a scan_id was returned indicating a scan started.
-        while True and scan_id is not None:
-            time.sleep(60)
-            scan = helpers.retrieve_scan_status(scan_id)
-            log.debug("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
-            if scan['status'] in ['running', 'integrating', 'dispatched']:
-                continue
-            else:
+        try:
+            # Get item off the queue, exit if nothing queued.
+            item = scan_tasker_queue.get()
+            log.debug('Worker started and got item from queue.')
+            log.debug("Got {} targets from command.".format(len(item['target_list'])))
+            if item is None:
                 break
 
-        # Gather scan details
-        if scan_id is not None and scan['status'] == 'finished':
-            try:
-                duration = time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min
-            except ValueError:
-                duration = time.strptime(scan['duration'], 'PT%S.%fS').tm_min
-            message = "<@{}> Scan ID: {} finished for `{}` at {} UTC\n"
-            message += "*Scan Duration*: {} minutes\n {}\n"
-            message += "Report is being generated on the console "
-            message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
-                                     time.asctime(),
-                                     duration,
-                                     scan['vulnerabilities'])
-            if scan['vulnerabilities']['total'] == 0:
-                message += helpers.get_gif()
-            if 'false_positive' in item:
-                xml_report = helpers.generate_xml2_report(scan_id)
-                scan_log_data = helpers.get_scan_logs(scan_id)
-                email_body = 'Please see attached logs related to a false positive for {} '.format(item['vuln_id'])
-                email_body += "Attachments are XML2 Report and Scan Data Export "
-                email_body += "including scan logs."
-                attachments = {"XML-Report.xml": xml_report, "Scan-Logs.zip": scan_log_data}
-                helpers.send_email(SECRETS['insightvm']['fp_email'],  # This is expecting a comma separated string, not a list.
-                                   subject='False Positive Report For {}'.format(item['vuln_id']),
-                                   body=email_body,
-                                   attachments=attachments,
-                                   port=587)
+            # Common vars
+            target_set = set()
+            site_set = set()
+            no_scan_set = set()
+            if not item['site_scan']:
+                # Determine site for IDs.
+                # List placeholder, parrallel function returns a list of outputs
+                site_asset_set = []
+                log.info("Getting list of all sites.")
+                sites = helpers.retrieve_all_site_ids()
+                log.info('Retrieving target lists, this may take a while...')
 
-        elif scan_id is not None:
-            message = "<@{}> Scan ID: {} *failed* for"
-            message += " {} at {} :sob:"
-            message += "Please contact the Security team."
-            message = message.format(item['user'], scan_id, item['target_list'], time.asctime())
+                # Run site_membership in parrallel, this is the biggest bottleneck
+                site_asset_list = Parallel(n_jobs=10, backend="threading")(
+                    delayed(helpers.site_membership)(site, item['target_list'])
+                    for site in sites.keys())
 
-        # Respond in Slack with scan finished message.
-        log.info(message)
-        slack_client.api_call(
-            "chat.postMessage",
-            channel=item['channel'],
-            text=message,
-            as_user=True
-        )
+                # Dedup
+                site_asset_set = set(list(itertools.chain(*site_asset_list)))
+                log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
 
-        log.debug('Worker done.')
-        scan_tasker_queue.task_done()
+                # Parse site and address to determine any assets that do not live
+                # in InsightVM.
+
+                # Get actual targets and site
+                for site_asset_pair in site_asset_set:
+                    target_set.add(site_asset_pair[1])
+                    site_set.add(site_asset_pair[0])
+                    no_scan_set = set(item['target_list']) - target_set
+
+                log.info('Site set: {}'.format(site_set))
+                log.info('Target set: {}'.format(target_set))
+                log.info('No-scan set: {}'.format(no_scan_set))
+            elif item['site_scan']:
+                site_set.add(item['target_list'][0])
+                log.info('Site set: {}'.format(site_set))
+
+            # Check if assets reside in more than one site, prompt for additional
+            # info if needed.  All assets should/must reside in one common site.
+            # Counting on InsightVM to handle different site errors.
+
+            scan_id = None
+
+            if len(site_set) > 1 and 'site id:' in item['command'].lower():
+                try:
+                    scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
+                    message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
+                except SystemError as e:
+                    message = "<@{}> Scan ID: {} produced an error".format(item['user'])
+                    message += e
+            # Assets in multiple sites but NO site ID provided.
+            elif len(site_set) > 1:
+                message = '<@{}> Assets exist in multiple sites ({}). '
+                message += 'Please re-run command with '
+                message += '`@nexpose_bot scan <IPs> site id:<ID>``'
+                message = message.format(item['user'], site_set)
+            # All assets do not exist in Nexpose
+            elif len(site_set) == 0:
+                message = '<@{}> scan for {} *failed*.'
+                message += '  Device(s) do not exist in insightvm :confounded:'
+                message += ' Device must have been scanned previously through a normal scan.'
+                message = message.format(item['user'], item['target_list'])
+            # All assets live in one site
+            else:
+                try:
+                    if 'false_positive' in item:
+                        scan_id = helpers.adhoc_site_scan(
+                            target_set,
+                            site_set.pop(),
+                            SECRETS['insightvm']['fp_template_id']
+                        )
+                    else:
+                        scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
+                    message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
+                except SystemError as e:
+                    message = "<@{}> Scan produced an error".format(item['user'])
+                    message += str(e)
+
+            # Indicate if some assets were not scanned due to no existing in Nexpose.
+            if no_scan_set:
+                message += ' These hosts do not exist in InsightVM, unable to scan: `{}`'.format(', '.join(no_scan_set))
+
+            # Respond to Slack with result
+            log.info(message)
+            slack_client.api_call(
+                "chat.postMessage",
+                channel=item['channel'],
+                text=message,
+                as_user=True
+            )
+
+            # Monitor scan for completion, simply break if scan has failed or other
+            # error. Only do this if a scan_id was returned indicating a scan started.
+            while True and scan_id is not None:
+                time.sleep(60)
+                scan = helpers.retrieve_scan_status(scan_id)
+                log.debug("Current statuts for Scan {}: {}".format(scan_id, scan['status']))
+                if scan['status'] in ['running', 'integrating', 'dispatched']:
+                    continue
+                else:
+                    break
+
+            # Gather scan details
+            if scan_id is not None and scan['status'] == 'finished':
+                try:
+                    duration = time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min
+                except ValueError:
+                    duration = time.strptime(scan['duration'], 'PT%S.%fS').tm_min
+                message = "<@{}> Scan ID: {} finished for `{}` at {} UTC\n"
+                message += "*Scan Duration*: {} minutes\n {}\n"
+                message += "Report is being generated on the console "
+                message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
+                                        time.asctime(),
+                                        duration,
+                                        scan['vulnerabilities'])
+                if scan['vulnerabilities']['total'] == 0:
+                    message += helpers.get_gif()
+                if 'false_positive' in item:
+                    xml_report = helpers.generate_xml2_report(scan_id)
+                    scan_log_data = helpers.get_scan_logs(scan_id)
+                    email_body = 'Please see attached logs related to a false positive for {} '.format(item['vuln_id'])
+                    email_body += "Attachments are XML2 Report and Scan Data Export "
+                    email_body += "including scan logs."
+                    attachments = {"XML-Report.xml": xml_report, "Scan-Logs.zip": scan_log_data}
+                    helpers.send_email(SECRETS['insightvm']['fp_email'],  # This is expecting a comma separated string, not a list.
+                                    subject='False Positive Report For {}'.format(item['vuln_id']),
+                                    body=email_body,
+                                    attachments=attachments,
+                                    port=587)
+
+            elif scan_id is not None:
+                message = "<@{}> Scan ID: {} *failed* for"
+                message += " {} at {} :sob:"
+                message += "Please contact the Security team."
+                message = message.format(item['user'], scan_id, item['target_list'], time.asctime())
+
+            # Respond in Slack with scan finished message.
+            log.info(message)
+            slack_client.api_call(
+                "chat.postMessage",
+                channel=item['channel'],
+                text=message,
+                as_user=True
+            )
+
+            log.debug('Worker done.')
+            scan_tasker_queue.task_done()
+        except:
+            pass
