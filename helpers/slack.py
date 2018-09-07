@@ -298,12 +298,16 @@ def worker(scan_tasker_queue, slack_client, log):
 
         # Gather scan details
         if scan_id is not None and scan['status'] == 'finished':
+            try:
+                duration = time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min
+            except ValueError:
+                duration = time.strptime(scan['duration'], 'PT%S.%fS').tm_min
             message = "<@{}> Scan ID: {} finished for `{}` at {} UTC\n"
             message += "*Scan Duration*: {} minutes\n {}\n"
             message += "Report is being generated on the console "
             message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
                                      time.asctime(),
-                                     time.strptime(scan['duration'], 'PT%MM%S.%fS').tm_min,
+                                     duration,
                                      scan['vulnerabilities'])
             if scan['vulnerabilities']['total'] == 0:
                 message += helpers.get_gif()
