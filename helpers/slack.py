@@ -204,18 +204,14 @@ def worker(scan_tasker_queue, slack_client, log):
                 # Determine site for IDs.
                 # List placeholder, parrallel function returns a list of outputs
                 site_asset_set = []
-                log.info("Getting list of all sites.")
-                sites = helpers.retrieve_all_site_ids()
-                log.info('Retrieving target lists, this may take a while...')
+                log.info("Getting asset/site membership.")
 
-                # Run site_membership in parrallel, this is the biggest bottleneck
-                site_asset_list = Parallel(n_jobs=10, backend="threading")(
-                    delayed(helpers.site_membership)(site, item['target_list'])
-                    for site in sites.keys())
+                for ip in item['target_list']:
+                    site_names_and_ids = helpers.retrieve_site_names_and_site_ids_containing_an_ip(ip)
+                    for site in site_names_and_ids:
+                        site_asset_set.append((site['site_id'], site['ip_address'])) 
 
-                # Dedup
-                site_asset_set = set(list(itertools.chain(*site_asset_list)))
-                log.debug('List returned from parrallel processing: {}'.format(site_asset_set))
+                log.debug('List returned from site membership: {}'.format(site_asset_set))
 
                 # Parse site and address to determine any assets that do not live
                 # in InsightVM.
@@ -252,6 +248,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 message += 'Please re-run command with '
                 message += '`@nexpose_bot scan <IPs> site id:<ID>``'
                 message = message.format(item['user'], site_set)
+                skip = True
             # All assets do not exist in Nexpose
             elif len(site_set) == 0:
                 message = '<@{}> scan for {} *failed*.'
@@ -286,6 +283,10 @@ def worker(scan_tasker_queue, slack_client, log):
                 text=message,
                 as_user=True
             )
+            
+            # Break if there will be no scan this run.
+            if skip:
+                break
 
             # Monitor scan for completion, simply break if scan has failed or other
             # error. Only do this if a scan_id was returned indicating a scan started.

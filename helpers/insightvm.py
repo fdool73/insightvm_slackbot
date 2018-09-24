@@ -94,6 +94,37 @@ def retrieve_severe_and_critical_vulnerability_ids_for_asset(asset_id):
 
         return text_vulnerability_ids
 
+def retrieve_site_names_and_site_ids_containing_an_ip(ip_address):
+    """Retrieve all the sites an IP belongs to and provide some other
+    enriching data about the asset.  Uses the same endpoint as the GUI 
+    which displays the sites after searching on an IP"""
+
+    site_names_and_site_ids = []
+
+    # Check that ip_address is an ip_address.
+    if not utility.is_ip_address(ip_address):
+        logging.error("Not a valid IP address: {}".format(ip_address))
+        return site_names_and_site_ids
+
+    url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, ip_address)
+    response = requests.get(url, auth=AUTH, headers=generate_headers())
+    json_response = json.loads(response.text)['records']
+
+    for site in json_response[0]["sitePermissions"]:
+
+        site_dict = {}
+
+        # Create a dictionary for each site name and site ID.
+        site_dict["ip_address"] = ip_address
+        site_dict["asset_id"] = json_response[0]["assetID"]
+        site_dict["site_id"] = site["siteID"]
+        site_dict["site_name"] = site["siteName"]
+
+        # Add dictionary to site_names_and_site_ids list.
+        site_names_and_site_ids.append(site_dict)
+
+    return site_names_and_site_ids
+
 
 def retrieve_vulnerability_severity_for_vulnerability_id(text_vulnerability_id):
     """Retrieve the criticality value for a text_vulnerability_id
