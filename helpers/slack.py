@@ -240,7 +240,7 @@ def worker(scan_tasker_queue, slack_client, log):
                     message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
                 except SystemError as e:
                     message = "<@{}> Scan produced an error".format(item['user'])
-                    message += e
+                    message += str(e)
                     skip = True
             # Assets in multiple sites but NO site ID provided.
             elif len(site_set) > 1:
