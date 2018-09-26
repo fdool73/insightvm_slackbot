@@ -1,5 +1,3 @@
-import itertools
-from joblib import Parallel, delayed
 import re
 from random import choice
 import time
@@ -209,7 +207,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 for ip in item['target_list']:
                     site_names_and_ids = helpers.retrieve_site_names_and_site_ids_containing_an_ip(ip)
                     for site in site_names_and_ids:
-                        site_asset_set.append((site['site_id'], site['ip_address'])) 
+                        site_asset_set.append((site['site_id'], site['ip_address']))
 
                 log.debug('List returned from site membership: {}'.format(site_asset_set))
 
@@ -241,7 +239,7 @@ def worker(scan_tasker_queue, slack_client, log):
                     scan_id = helpers.adhoc_site_scan(target_set, int(item['command'].split(':')[1]))
                     message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
                 except SystemError as e:
-                    message = "<@{}> Scan ID: {} produced an error".format(item['user'])
+                    message = "<@{}> Scan produced an error".format(item['user'])
                     message += e
                     skip = True
             # Assets in multiple sites but NO site ID provided.
@@ -287,7 +285,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 text=message,
                 as_user=True
             )
-            
+
             # Break if there will be no scan this run.
             if skip:
                 break
@@ -313,9 +311,9 @@ def worker(scan_tasker_queue, slack_client, log):
                 message += "*Scan Duration*: {} minutes\n {}\n"
                 message += "Report is being generated on the console "
                 message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
-                                        time.asctime(),
-                                        duration,
-                                        scan['vulnerabilities'])
+                                         time.asctime(),
+                                         duration,
+                                         scan['vulnerabilities'])
                 if scan['vulnerabilities']['total'] == 0:
                     message += helpers.get_gif()
                 if 'false_positive' in item:
@@ -326,10 +324,10 @@ def worker(scan_tasker_queue, slack_client, log):
                     email_body += "including scan logs."
                     attachments = {"XML-Report.xml": xml_report, "Scan-Logs.zip": scan_log_data}
                     helpers.send_email(SECRETS['insightvm']['fp_email'],  # This is expecting a comma separated string, not a list.
-                                    subject='False Positive Report For {}'.format(item['vuln_id']),
-                                    body=email_body,
-                                    attachments=attachments,
-                                    port=587)
+                                       subject='False Positive Report For {}'.format(item['vuln_id']),
+                                       body=email_body,
+                                       attachments=attachments,
+                                       port=587)
 
             elif scan_id is not None:
                 message = "<@{}> Scan ID: {} *failed* for"
@@ -348,5 +346,6 @@ def worker(scan_tasker_queue, slack_client, log):
 
             log.debug('Worker done.')
             scan_tasker_queue.task_done()
-        except:
+        except Exception as e:
+            log.error(e)
             pass

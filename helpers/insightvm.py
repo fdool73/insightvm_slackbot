@@ -3,6 +3,7 @@ import asyncio
 import csv
 import datetime
 import json
+import logging
 import os
 import socket
 import sys
@@ -94,9 +95,10 @@ def retrieve_severe_and_critical_vulnerability_ids_for_asset(asset_id):
 
         return text_vulnerability_ids
 
+
 def retrieve_site_names_and_site_ids_containing_an_ip(ip_address):
     """Retrieve all the sites an IP belongs to and provide some other
-    enriching data about the asset.  Uses the same endpoint as the GUI 
+    enriching data about the asset.  Uses the same endpoint as the GUI
     which displays the sites after searching on an IP"""
 
     site_names_and_site_ids = []
@@ -981,8 +983,8 @@ def generate_xml2_report(scan_id):
         "scope": {
             "assetsInOnlyMostRecentScanOfSite": False,
             "scan": scan_id
-            }
         }
+    }
 
     report_id = SECRETS['insightvm']['fp_report_id']
 
@@ -1005,7 +1007,7 @@ def generate_xml2_report(scan_id):
         report_link = i['uri']
 
     # Get report
-    xml_report =  requests.get(report_link, auth=AUTH, headers=generate_headers())
+    xml_report = requests.get(report_link, auth=AUTH, headers=generate_headers())
 
     return xml_report.content
 
