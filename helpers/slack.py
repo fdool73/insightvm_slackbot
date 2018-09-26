@@ -234,6 +234,7 @@ def worker(scan_tasker_queue, slack_client, log):
             # Counting on InsightVM to handle different site errors.
 
             scan_id = None
+            skip = False
 
             if len(site_set) > 1 and 'site id:' in item['command'].lower():
                 try:
@@ -242,6 +243,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 except SystemError as e:
                     message = "<@{}> Scan ID: {} produced an error".format(item['user'])
                     message += e
+                    skip = True
             # Assets in multiple sites but NO site ID provided.
             elif len(site_set) > 1:
                 message = '<@{}> Assets exist in multiple sites ({}). '
@@ -253,8 +255,9 @@ def worker(scan_tasker_queue, slack_client, log):
             elif len(site_set) == 0:
                 message = '<@{}> scan for {} *failed*.'
                 message += '  Device(s) do not exist in insightvm :confounded:'
-                message += ' Device must have been scanned previously through a normal scan.'
+                message += ' Device must have been scanned previously through a normal scan. '
                 message = message.format(item['user'], item['target_list'])
+                skip = True
             # All assets live in one site
             else:
                 try:
@@ -266,14 +269,15 @@ def worker(scan_tasker_queue, slack_client, log):
                         )
                     else:
                         scan_id = helpers.adhoc_site_scan(target_set, site_set.pop())
-                    message = "<@{}> Scan ID: {} started".format(item['user'], scan_id)
+                    message = "<@{}> Scan ID: {} started. ".format(item['user'], scan_id)
                 except SystemError as e:
-                    message = "<@{}> Scan produced an error".format(item['user'])
+                    message = "<@{}> Scan produced an error ".format(item['user'])
                     message += str(e)
+                    skip = True
 
             # Indicate if some assets were not scanned due to no existing in Nexpose.
             if no_scan_set:
-                message += ' These hosts do not exist in InsightVM, unable to scan: `{}`'.format(', '.join(no_scan_set))
+                message += ' These hosts do not exist in InsightVM, unable to scan: `{}` '.format(', '.join(no_scan_set))
 
             # Respond to Slack with result
             log.info(message)
