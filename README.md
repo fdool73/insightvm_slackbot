@@ -19,7 +19,7 @@ This guide sums bot creation up pretty simply. https://www.fullstackpython.com/b
 @nexpose_bot scan 192.168.1.1 192.168.1.2
 @nexpose_bot scan 192.168.1.1,192.168.1.2
 
-# Scan An Asset That Is In Multiple Sites (pick the one you want assert to be scanned as)
+# Scan An Asset That Is In Multiple Sites (pick the one you want asset to be scanned as)
 @nexpose_bot scan 192.168.1.1 site id:123
 
 # Scan a full site
