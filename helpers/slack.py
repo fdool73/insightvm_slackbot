@@ -288,7 +288,7 @@ def worker(scan_tasker_queue, slack_client, log):
 
             # Break if there will be no scan this run.
             if skip:
-                break
+                continue
 
             # Monitor scan for completion, simply break if scan has failed or other
             # error. Only do this if a scan_id was returned indicating a scan started.
