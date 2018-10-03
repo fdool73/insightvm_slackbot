@@ -59,7 +59,7 @@ def retrieve_site_names_and_site_ids_containing_an_ip(target):
     #     logging.error("Not a valid IP address: {}".format(ip_address))
     #     return site_names_and_site_ids
 
-    url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, ip_address)
+    url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, target)
     response = requests.get(url, auth=AUTH, headers=generate_headers())
     json_response = json.loads(response.text)['records']
 
