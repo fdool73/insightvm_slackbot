@@ -68,7 +68,7 @@ def retrieve_site_names_and_site_ids_containing_an_ip(target):
         site_dict = {}
 
         # Create a dictionary for each site name and site ID.
-        site_dict["ip_address"] = target
+        site_dict["target"] = target
         site_dict["asset_id"] = json_response[0]["assetID"]
         site_dict["site_id"] = site["siteID"]
         site_dict["site_name"] = site["siteName"]
