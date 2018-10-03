@@ -46,6 +46,39 @@ def async_request(api_endpoint):
     return all_data
 
 
+def retrieve_site_names_and_site_ids_containing_an_ip(target):
+    """Retrieve all the sites an IP belongs to and provide some other
+    enriching data about the asset.  Uses the same endpoint as the GUI
+    which displays the sites after searching on an IP"""
+
+    site_names_and_site_ids = []
+
+    # Check that ip_address is an ip_address.
+    # Commented out to support hostname scanning
+    # if not utility.is_ip_address(ip_address):
+    #     logging.error("Not a valid IP address: {}".format(ip_address))
+    #     return site_names_and_site_ids
+
+    url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, ip_address)
+    response = requests.get(url, auth=AUTH, headers=generate_headers())
+    json_response = json.loads(response.text)['records']
+
+    for site in json_response[0]["sitePermissions"]:
+
+        site_dict = {}
+
+        # Create a dictionary for each site name and site ID.
+        site_dict["ip_address"] = target
+        site_dict["asset_id"] = json_response[0]["assetID"]
+        site_dict["site_id"] = site["siteID"]
+        site_dict["site_name"] = site["siteName"]
+
+        # Add dictionary to site_names_and_site_ids list.
+        site_names_and_site_ids.append(site_dict)
+
+    return site_names_and_site_ids
+
+
 def retrieve_severe_and_critical_vulnerability_ids_for_asset(asset_id):
     """Retrieve the textual vulnerability IDs (tlsv1_0-enabled) given an asset ID.
     """
@@ -94,39 +127,6 @@ def retrieve_severe_and_critical_vulnerability_ids_for_asset(asset_id):
                         text_vulnerability_ids.append(text_vulnerability_id_dict)
 
         return text_vulnerability_ids
-
-
-def retrieve_site_names_and_site_ids_containing_an_ip(ip_address):
-    """Retrieve all the sites an IP belongs to and provide some other
-    enriching data about the asset.  Uses the same endpoint as the GUI
-    which displays the sites after searching on an IP"""
-
-    site_names_and_site_ids = []
-
-    # Check that ip_address is an ip_address.
-    # Commented out to allow scanning by hostname
-    # if not utility.is_ip_address(ip_address):
-    #     logging.error("Not a valid IP address: {}".format(ip_address))
-    #     return site_names_and_site_ids
-
-    url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, ip_address)
-    response = requests.get(url, auth=AUTH, headers=generate_headers())
-    json_response = json.loads(response.text)['records']
-
-    for site in json_response[0]["sitePermissions"]:
-
-        site_dict = {}
-
-        # Create a dictionary for each site name and site ID.
-        site_dict["ip_address"] = ip_address
-        site_dict["asset_id"] = json_response[0]["assetID"]
-        site_dict["site_id"] = site["siteID"]
-        site_dict["site_name"] = site["siteName"]
-
-        # Add dictionary to site_names_and_site_ids list.
-        site_names_and_site_ids.append(site_dict)
-
-    return site_names_and_site_ids
 
 
 def retrieve_vulnerability_severity_for_vulnerability_id(text_vulnerability_id):
@@ -926,6 +926,40 @@ def retrieve_scan_status(scan_id):
 
     # Return more than just the status since there is additional useful info.
     return json_response
+
+
+def site_membership(site, target_list):
+    '''Determines if the provided IP(s)/hostnames are part of a given site. This function
+    should be used to loop through a collection (all) sites.
+    '''
+    targs = retrieve_included_targets_in_site(site, False)
+    targs += retrieve_sites_all_included_asset_group_targets(site)
+    matches = []
+    for address in target_list:
+        if address is None:
+            continue
+        # IP to IP matching
+        if address in targs:
+            matches.append((site, address))
+        # IP to Hostname Matching
+        elif utility.is_ip_address(address):
+            try:
+                if socket.gethostbyaddr(address)[0] in targs:
+                    matches.append((site, socket.gethostbyaddr(address)[0]))
+            # Handle unknown host error
+            except socket.herror:
+                pass
+        # Hostname to Hostname matching
+        else:
+            try:
+                hostname = socket.gethostbyname(address)
+                if hostname in targs:
+                    matches.append((site, hostname))
+            # Handle unknown host error
+            except socket.gaierror:
+                pass
+
+    return matches
 
 
 def generate_xml2_report(scan_id):

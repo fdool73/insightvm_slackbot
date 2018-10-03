@@ -192,7 +192,7 @@ def worker(scan_tasker_queue, slack_client, log):
             log.debug('Worker started and got item from queue.')
             log.debug("Got {} targets from command.".format(len(item['target_list'])))
             if item is None:
-                break
+                continue
 
             # Common vars
             target_set = set()
@@ -207,7 +207,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 for ip in item['target_list']:
                     site_names_and_ids = helpers.retrieve_site_names_and_site_ids_containing_an_ip(ip)
                     for site in site_names_and_ids:
-                        site_asset_set.append((site['site_id'], site['ip_address']))
+                        site_asset_set.append((site['site_id'], site['target']))
 
                 log.debug('List returned from site membership: {}'.format(site_asset_set))
 
@@ -286,7 +286,7 @@ def worker(scan_tasker_queue, slack_client, log):
                 as_user=True
             )
 
-            # Break if there will be no scan this run.
+            # Skip the rest if there will be no scan this run.
             if skip:
                 continue
 
