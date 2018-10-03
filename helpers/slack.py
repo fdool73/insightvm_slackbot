@@ -27,7 +27,7 @@ def extract_hostnames(input_string):
     """
     # Regex to parse hostnames
     hostname_matches = []
-    hostname_regex = '(?:^|(?<=\s))(?:[a-zA-Z0-9\-]+\.)+(?:[a-zA-Z])+(?:(?=\s|(?=[,])|(?=$)))'
+    hostname_regex = '(?:^|(?<=\s)|(?<=\|))(?:[a-zA-Z0-9\-]+\.)+(?:[a-zA-Z])+(?:(?=\s|(?=[,])|(?=$)|(?=\>)))'
     hostname_matches = re.findall(hostname_regex, input_string)
     dedup = set(hostname_matches)
     hostname_matches = list(dedup)

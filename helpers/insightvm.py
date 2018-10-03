@@ -104,9 +104,10 @@ def retrieve_site_names_and_site_ids_containing_an_ip(ip_address):
     site_names_and_site_ids = []
 
     # Check that ip_address is an ip_address.
-    if not utility.is_ip_address(ip_address):
-        logging.error("Not a valid IP address: {}".format(ip_address))
-        return site_names_and_site_ids
+    # Commented out to allow scanning by hostname
+    # if not utility.is_ip_address(ip_address):
+    #     logging.error("Not a valid IP address: {}".format(ip_address))
+    #     return site_names_and_site_ids
 
     url = "{}/data/asset?sort=assetOSName&dir=ASC&table-id=all-assets&startIndex=0&results=500&phrase={}&allWords=true".format(BASE_URL, ip_address)
     response = requests.get(url, auth=AUTH, headers=generate_headers())
@@ -925,40 +926,6 @@ def retrieve_scan_status(scan_id):
 
     # Return more than just the status since there is additional useful info.
     return json_response
-
-
-def site_membership(site, target_list):
-    '''Determines if the provided IP(s)/hostnames are part of a given site. This function
-    should be used to loop through a collection (all) sites.
-    '''
-    targs = retrieve_included_targets_in_site(site, False)
-    targs += retrieve_sites_all_included_asset_group_targets(site)
-    matches = []
-    for address in target_list:
-        if address is None:
-            continue
-        # IP to IP matching
-        if address in targs:
-            matches.append((site, address))
-        # IP to Hostname Matching
-        elif utility.is_ip_address(address):
-            try:
-                if socket.gethostbyaddr(address)[0] in targs:
-                    matches.append((site, socket.gethostbyaddr(address)[0]))
-            # Handle unknown host error
-            except socket.herror:
-                pass
-        # Hostname to Hostname matching
-        else:
-            try:
-                hostname = socket.gethostbyname(address)
-                if hostname in targs:
-                    matches.append((site, hostname))
-            # Handle unknown host error
-            except socket.gaierror:
-                pass
-
-    return matches
 
 
 def generate_xml2_report(scan_id):
