@@ -3,7 +3,7 @@
 ![insightvm_bot](insightvm_bot.png)
 
 # InsightVM_slackbot
-Slackbot to automate ad-hoc scanning and reporting in insightvm.  In Slack, simply send a message like `@insightvm_bot scan 192.18.1.1` and see the bot schedule the scan, run it, and report back the results.  You can also just set up a direct chat with the bot if you don't want to spam your channel.  Use the same syntax to schedule a scan.
+Slackbot to automate ad-hoc scanning and reporting in insightvm.  In Slack, simply send a message like `@insightvm_bot scan 192.18.1.1` and see the bot schedule the scan, run it, and report back the results.  You can also just set up a direct chat with the bot if you don't want to spam your channel.  Use the same syntax to schedule a scan.  The scan targets must match how they are intered in the site config (IPs or Hostnames).
 
 # Getting Started
 
@@ -12,10 +12,10 @@ This guide sums bot creation up pretty simply. https://www.fullstackpython.com/b
 
 ## Usage
 ```
-# Scan Single IP
+# Scan Single IP/Hostname (as defined in site config)
 @nexpose_bot scan 192.168.1.1
 
-# Scan Multipe IPs (up to 5)
+# Scan Multipe IPs/Hostnames (up to 5)
 @nexpose_bot scan 192.168.1.1 192.168.1.2
 @nexpose_bot scan 192.168.1.1,192.168.1.2
 
