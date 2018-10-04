@@ -309,11 +309,13 @@ def worker(scan_tasker_queue, slack_client, log):
                     duration = time.strptime(scan['duration'], 'PT%S.%fS').tm_min
                 message = "<@{}> Scan ID: {} finished for `{}` at {} UTC\n"
                 message += "*Scan Duration*: {} minutes\n {}\n"
-                message += "Report is being generated on the console "
+                message += "Scan details available here: https://{}/scan.jsp?scanid={}"
                 message = message.format(item['user'], scan_id, ', '.join(item['target_list']),
                                          time.asctime(),
                                          duration,
-                                         scan['vulnerabilities'])
+                                         scan['vulnerabilities'],
+                                         SECRETS['insightvm']['host'],
+                                         scan_id)
                 if scan['vulnerabilities']['total'] == 0:
                     message += helpers.get_gif()
                 if 'false_positive' in item:
